@@ -1,5 +1,6 @@
 package net.slipcor.pvparena;
 
+import net.slipcor.pvparena.api.PvpArenaPlaceholderExpansion;
 import net.slipcor.pvparena.arena.Arena;
 import net.slipcor.pvparena.arena.ArenaClass;
 import net.slipcor.pvparena.arena.ArenaPlayer;
@@ -371,6 +372,13 @@ public class PVPArena extends JavaPlugin {
         shuttingDown = false;
         instance = this;
         debugger = new Debug(1);
+
+        // Small check to make sure that PlaceholderAPI is installed
+        if(Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null){
+            new PvpArenaPlaceholderExpansion(this).register();
+        }
+
+        getCommand("test").setExecutor(new TestCommand());
 
         //Enable bStats
         Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
