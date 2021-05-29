@@ -504,10 +504,10 @@ public class BlockListener implements Listener {
             return;
         }
         if (arena == null) {
-            debug("painting break inside the arena");
-        } else {
-            debug(arena, "painting break inside the arena");
+            debug("painting break outside arena");
+            return;
         }
+        debug(arena, "painting break inside an arena");
         ArenaModuleManager.onPaintingBreak(arena, event.getEntity(), event.getEntity().getType());
     }
 }
