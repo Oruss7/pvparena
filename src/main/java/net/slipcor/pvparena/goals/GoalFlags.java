@@ -22,7 +22,11 @@ import net.slipcor.pvparena.runnables.EndRunnable;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.DyeColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -58,6 +62,10 @@ public class GoalFlags extends AbstractBlockLocationGoal {
     protected static final String FLAG = "flag";
     protected static final String TOUCHDOWN = "touchdown";
     protected static final String FLAGEFFECT = "flageffect";
+
+    enum Action {
+        BRING, TAKE, RELEASE
+    }
 
     // players currently holding a team flag
     protected Map<ArenaTeam, Player> flagHolders = new HashMap<>();
@@ -597,6 +605,8 @@ public class GoalFlags extends AbstractBlockLocationGoal {
         }
         this.computeScore(this.arena, arenaTeam, flagTeam);
 
+        playSpecialEffects(blockLocation, Action.BRING, arenaTeamFlag);
+
         if (this.arena.getConfig().getBoolean(Config.CFG.GOAL_FLAGS_BREAK_TO_CAPTURE)) {
             player.getInventory().remove(mainHandItem);
             player.updateInventory();
@@ -657,6 +667,9 @@ public class GoalFlags extends AbstractBlockLocationGoal {
         if (paBlockLocation == null) {
             return;
         }
+
+        playSpecialEffects(paBlockLocation, Action.TAKE, arenaTeamFlag);
+
         final Block block = paBlockLocation.toLocation().getBlock();
         if (this.arena.getConfig().getBoolean(Config.CFG.GOAL_FLAGS_BREAK_TO_CAPTURE)) {
             player.getInventory().addItem(new ItemStack(block.getType()));
@@ -689,6 +702,53 @@ public class GoalFlags extends AbstractBlockLocationGoal {
                     }
                 }
             }
+        }
+    }
+
+    private void playSpecialEffects(PABlockLocation blockLocation, Action action, ArenaTeam ownerTeam) {
+        World world = Bukkit.getWorld(blockLocation.getWorldName());
+        Location location = blockLocation.toLocation();
+        final Config config = this.arena.getConfig();
+        if (world == null) {
+            return;
+        }
+        // All Config are nullable
+        String particle;
+        String sound;
+        String ownSound;
+        switch (action){
+            case TAKE:
+                particle = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_STOLEN_PARTICLE);
+                sound = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_STOLEN_SOUND);
+                ownSound = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_OWN_STOLEN_SOUND);
+                break;
+            case BRING:
+                particle = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_CAPTURED_PARTICLE);
+                sound = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_CAPTURED_SOUND);
+                ownSound = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_OWN_CAPTURED_SOUND);
+                break;
+            case RELEASE:
+                particle = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_RELEASE_PARTICLE);
+                sound = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_RELEASE_SOUND);
+                ownSound = config.getDefinedString(Config.CFG.GOAL_FLAGS_FLAG_OWN_RELEASE_SOUND);
+                break;
+            default:
+                particle = null;
+                sound = null;
+                ownSound = null;
+        }
+
+        if (particle != null) {
+            world.spawnParticle(Particle.valueOf(particle), location.getX(), location.getY() + 1, location.getZ(), 25);
+        }
+        if(ownSound != null){
+            ownerTeam.getTeamMembers()
+                    .forEach(arenaPlayer -> arenaPlayer.getPlayer().playSound(location, Sound.valueOf(ownSound), 1, 1));
+        }
+        if (sound != null) {
+            this.arena.getFighters().stream()
+                    .filter(arenaPlayer -> ownSound == null || !ownerTeam.getTeamMembers().contains(arenaPlayer))
+                    .forEach(arenaPlayer -> arenaPlayer.getPlayer().playSound(location, Sound.valueOf(sound), 1, 1));
         }
     }
 
