@@ -9,6 +9,7 @@ import net.slipcor.pvparena.core.Config.CFG;
 import net.slipcor.pvparena.core.Language;
 import net.slipcor.pvparena.core.Language.MSG;
 import net.slipcor.pvparena.core.StringParser;
+import net.slipcor.pvparena.database.PlayerArenaStats;
 import net.slipcor.pvparena.events.*;
 import net.slipcor.pvparena.loadables.ArenaGoal;
 import net.slipcor.pvparena.loadables.ArenaModule;
@@ -65,6 +66,8 @@ import static net.slipcor.pvparena.config.Debugger.debug;
 
 public class Arena {
 
+    private static final String PVP_ARENA = "PVP Arena";
+
     private final Set<ArenaClass> classes = new HashSet<>();
     private final Set<ArenaModule> mods = new HashSet<>();
     private final Set<ArenaRegion> regions = new HashSet<>();
@@ -78,7 +81,7 @@ public class Arena {
     private final Map<Player, UUID> entities = new HashMap<>();
 
     private final String name;
-    private String prefix = "PVP Arena";
+    private String prefix = PVP_ARENA;
     private String owner = "%server%";
 
     // arena status
@@ -424,9 +427,7 @@ public class Arena {
         final Set<ArenaPlayer> players = new HashSet<>();
 
         for (final ArenaTeam team : this.teams) {
-            for (final ArenaPlayer ap : team.getTeamMembers()) {
-                players.add(ap);
-            }
+            players.addAll(team.getTeamMembers());
         }
         return players;
     }
@@ -553,7 +554,7 @@ public class Arena {
             this.scoreboard = this.getCommonScoreboard(true);
 
             // length = 18 without arena name
-            String sbHeaderPrefix = ChatColor.GREEN + "PVP Arena" + ChatColor.RESET + " - " + ChatColor.YELLOW;
+            String sbHeaderPrefix = ChatColor.GREEN + PVP_ARENA + ChatColor.RESET + " - " + ChatColor.YELLOW;
             String sbHeaderName = sbHeaderPrefix + this.getName();
 
             if (sbHeaderName.length() > 32) {
@@ -893,7 +894,7 @@ public class Arena {
             return;
         }
         debug(sender, '@' + sender.getName() + ": " + msg);
-        sender.sendMessage(Language.parse(MSG.MESSAGES_GENERAL, PVPArena.getInstance().getConfig().getString("globalPrefix", "PVP Arena"), msg));
+        sender.sendMessage(Language.parse(MSG.MESSAGES_GENERAL, PVPArena.getInstance().getConfig().getString("globalPrefix", PVP_ARENA), msg));
     }
 
     /**

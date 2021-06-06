@@ -1,5 +1,7 @@
 package net.slipcor.pvparena;
 
+import com.j256.ormlite.jdbc.JdbcPooledConnectionSource;
+import net.slipcor.pvparena.api.PvpArenaPlaceholderExpansion;
 import net.slipcor.pvparena.arena.Arena;
 import net.slipcor.pvparena.arena.ArenaClass;
 import net.slipcor.pvparena.arena.ArenaPlayer;
@@ -10,6 +12,10 @@ import net.slipcor.pvparena.core.Help;
 import net.slipcor.pvparena.core.Language;
 import net.slipcor.pvparena.core.Language.MSG;
 import net.slipcor.pvparena.core.StringParser;
+import net.slipcor.pvparena.database.Database;
+import net.slipcor.pvparena.database.MySQL;
+import net.slipcor.pvparena.database.PlayerArenaStats;
+import net.slipcor.pvparena.database.SQLite;
 import net.slipcor.pvparena.listeners.BlockListener;
 import net.slipcor.pvparena.listeners.EntityListener;
 import net.slipcor.pvparena.listeners.InventoryListener;
@@ -63,6 +69,9 @@ public class PVPArena extends JavaPlugin {
     private UpdateChecker updateChecker;
     private boolean shuttingDown;
 
+    private Database database;
+    private boolean mysql;
+
     public static PVPArena getInstance() {
         return instance;
     }
@@ -104,6 +113,24 @@ public class PVPArena extends JavaPlugin {
 
     public UpdateChecker getUpdateChecker() {
         return this.updateChecker;
+    }
+
+    /**
+     * Returns the database instance
+     *
+     * @return Database instance
+     */
+    public Database getDatabase() {
+        return database;
+    }
+
+    /**
+     * Checks if MySQL is used or not
+     *
+     * @return if MySQL is used (false means that SQLite is being used)
+     */
+    public boolean isMysqlDatabase() {
+        return mysql;
     }
 
     /**
@@ -358,6 +385,9 @@ public class PVPArena extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if(this.database != null) {
+            this.database.closeConnection();
+        }
         this.shuttingDown = true;
         ArenaManager.reset(true);
         Debugger.destroy();
@@ -370,35 +400,17 @@ public class PVPArena extends JavaPlugin {
         this.shuttingDown = false;
         instance = this;
 
+        // Small check to make sure that PlaceholderAPI is installed
+        if(Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null){
+            new PvpArenaPlaceholderExpansion(this).register();
+        }
+
+        getCommand("test").setExecutor(new TestCommand());
+
         // TODO: Enable bStats
         // Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
 
-        this.saveDefaultConfig();
-        if (!this.getConfig().contains("shortcuts")) {
-            final List<String> ffa = new ArrayList<>();
-            final List<String> teams = new ArrayList<>();
-
-            ffa.add("arena1");
-            ffa.add("arena2");
-
-            teams.add("teamarena1");
-            teams.add("teamarena2");
-
-            this.getConfig().options().copyDefaults(true);
-            this.getConfig().addDefault("shortcuts.freeforall", ffa);
-            this.getConfig().addDefault("shortcuts.teams", teams);
-
-            this.saveConfig();
-        }
-
-        if (this.getConfig().contains("update.type") || this.getConfig().contains("update.mode")) {
-            this.getConfig().set("update.plugin", this.getConfig().getString("update.mode", "announce"));
-            this.getConfig().set("update.modules", this.getConfig().getBoolean("update.modules", true) ? "download" : "announce");
-            this.getConfig().set("update.type", null);
-            this.getConfig().set("update.mode", null);
-
-            this.saveConfig();
-        }
+        this.initDefaultConfig();
 
         this.getDataFolder().mkdir();
         new File(this.getDataFolder().getPath() + "/arenas").mkdir();
@@ -429,8 +441,6 @@ public class PVPArena extends JavaPlugin {
         Language.init(this.getConfig().getString("language", "en"));
         Help.init(this.getConfig().getString("language", "en"));
 
-        StatisticsManager.initialize();
-
         this.getServer().getPluginManager()
                 .registerEvents(new BlockListener(), this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(),
@@ -455,8 +465,93 @@ public class PVPArena extends JavaPlugin {
             ArenaManager.readShortcuts(this.getConfig().getConfigurationSection("shortcuts"));
         }
 
+        this.initDatabase();
+
         this.updateChecker = new UpdateChecker(this.getFile());
+
+        StatisticsManager.initialize();
 
         Language.logInfo(MSG.LOG_PLUGIN_ENABLED, this.getDescription().getFullName());
     }
+
+    /**
+     * Set default values to config
+     */
+    private void initDefaultConfig() {
+
+        boolean mustSave = false;
+
+        this.saveDefaultConfig();
+        if (!this.getConfig().contains("shortcuts")) {
+            final List<String> ffa = new ArrayList<>();
+            final List<String> teams = new ArrayList<>();
+
+            ffa.add("arena1");
+            ffa.add("arena2");
+
+            teams.add("teamarena1");
+            teams.add("teamarena2");
+
+            this.getConfig().options().copyDefaults(true);
+            this.getConfig().addDefault("shortcuts.freeforall", ffa);
+            this.getConfig().addDefault("shortcuts.teams", teams);
+
+            mustSave = true;
+        }
+
+        if (this.getConfig().contains("update.type") || this.getConfig().contains("update.mode")) {
+            this.getConfig().set("update.plugin", this.getConfig().getString("update.mode", "announce"));
+            this.getConfig().set("update.modules", this.getConfig().getBoolean("update.modules", true) ? "download" : "announce");
+            this.getConfig().set("update.type", null);
+            this.getConfig().set("update.mode", null);
+
+            mustSave = true;
+        }
+
+        if (this.getConfig().contains("mysql.enabled") || this.getConfig().contains("mysql.host")) {
+            this.getConfig().set("mysql.enabled", true);
+            this.getConfig().set("mysql.host", "localhost");
+            this.getConfig().set("mysql.port", 3306);
+            this.getConfig().set("mysql.user", "root");
+            this.getConfig().set("mysql.pass", "root");
+            this.getConfig().set("mysql.base", "pvparena");
+            this.getConfig().set("mysql.prefix", "pvparena_");
+
+            mustSave = true;
+        }
+
+        if(mustSave){
+            this.saveConfig();
+        }
+    }
+
+    private void initDatabase(){
+        // try to connect to database
+        final boolean isMysqlEnabled = getConfig().getBoolean("mysql.enabled", true);
+        if (isMysqlEnabled) {
+            PVPArena.getInstance().getLogger().info("Connecting to MySQL database");
+            this.database = new MySQL(this, getConfig().getString("mysql.host"),
+                    getConfig().getString("mysql.port"),
+                    getConfig().getString("mysql.base"), getConfig().getString("mysql.user"),
+                    getConfig().getString("mysql.pass"));
+            if (this.database.getConnection() != null) {
+                this.mysql = true;
+                PVPArena.getInstance().getLogger().info("Successfully connected to MySQL database.");
+            }
+        }
+        if (!isMysqlEnabled || !this.mysql) {
+            this.database = new SQLite(this, "database.db");
+            if (isMysqlEnabled) {
+                PVPArena.getInstance().getLogger().warning( "No connection to the mySQL Database! Using SQLite for storing data as fallback.");
+            } else {
+                PVPArena.getInstance().getLogger().info("Using SQLite for storing data.");
+            }
+            if (this.database.getConnection() != null) {
+                this.mysql = false;
+                PVPArena.getInstance().getLogger().info("Successfully connected to SQLite database.");
+            }
+        }
+        this.database.init();
+    }
+
 }

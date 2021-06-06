@@ -30,9 +30,9 @@ public class PAI_GlobalStats extends AbstractGlobalCommand {
             return;
         }
 
-        if (!argCountValid(sender, args, new Integer[]{1})) {
-            return;
-        }
+//        if (!argCountValid(sender, args, new Integer[]{1})) {
+//            return;
+//        }
 
         new PAI_Stats().commit(null, sender, args);
     }

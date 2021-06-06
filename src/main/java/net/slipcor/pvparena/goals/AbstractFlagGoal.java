@@ -486,7 +486,6 @@ public abstract class AbstractFlagGoal extends ArenaGoal implements Listener {
                     continue;
                 }
                 for (final ArenaPlayer ap : team.getTeamMembers()) {
-                    ap.addLosses();
                     ap.setStatus(Status.LOST);
                 }
             }

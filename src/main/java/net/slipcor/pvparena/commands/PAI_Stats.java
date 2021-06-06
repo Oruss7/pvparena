@@ -1,6 +1,7 @@
 package net.slipcor.pvparena.commands;
 
 import net.slipcor.pvparena.arena.Arena;
+import net.slipcor.pvparena.arena.ArenaPlayer;
 import net.slipcor.pvparena.core.Help;
 import net.slipcor.pvparena.core.Help.HELP;
 import net.slipcor.pvparena.core.Language;
@@ -8,7 +9,10 @@ import net.slipcor.pvparena.core.Language.MSG;
 import net.slipcor.pvparena.core.StringParser;
 import net.slipcor.pvparena.managers.StatisticsManager;
 import net.slipcor.pvparena.managers.StatisticsManager.Type;
+import net.slipcor.pvparena.updater.ModulesUpdater;
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -36,32 +40,54 @@ public class PAI_Stats extends AbstractArenaCommand {
             return;
         }
 
-        if (!argCountValid(sender, arena, args, new Integer[]{1, 2})) {
-            return;
-        }
+        if (args.length >= 1) {
+            switch (args[0]) {
+                case "top":
+                    final Type statType = Type.getByString(args[0]);
 
-        final Type statType = Type.getByString(args[0]);
+                    if (statType == null) {
+                        Arena.pmsg(sender, Language.parse(arena, MSG.STATS_TYPENOTFOUND, StringParser.joinArray(Type.values(), ", ").replace("NULL, ", "")));
+                        return;
+                    }
 
-        if (statType == null) {
-            Arena.pmsg(sender, Language.parse(arena, MSG.STATS_TYPENOTFOUND, StringParser.joinArray(Type.values(), ", ").replace("NULL, ", "")));
-            return;
-        }
+                    int max = 10;
 
-        Map<String, Integer> playersStats = StatisticsManager.getStats(arena, statType);
+                    if (args.length > 1) {
+                        try {
+                            max = Integer.parseInt(args[1]);
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
 
-        int max = 10;
+                    getTopPlayersForStat(sender, statType, arena, max);
+                    break;
 
-        if (args.length > 1) {
-            try {
-                max = Integer.parseInt(args[1]);
-            } catch (NumberFormatException ignored) {
+                default:
+                    Player player = Bukkit.getPlayer(args[0]);
+                    if (player == null) {
+                        Arena.pmsg(sender, Language.parse(arena, MSG.ERROR_PLAYER_NOTFOUND, args[0]));
+                        return;
+                    }
+                    String arenaName = null;
+                    if (args.length > 1) {
+                        arenaName = args[1];
+                    }
+                    ArenaPlayer arenaPlayer = ArenaPlayer.parsePlayer(player.getName());
+                    Arena.pmsg(sender, String.format("Stats for %s%s", player.getDisplayName(), arenaName != null ? " and arena " + arenaName : ""));
+                    Arena.pmsg(sender, "-----------------------------------");
+                    StatisticsManager.getPlayerArenaStats(player, arenaName).getMap()
+                            .forEach((key, value) -> Arena.pmsg(sender, key + ": " + value));
             }
         }
 
+    }
+
+    private void getTopPlayersForStat(CommandSender sender, Type statType, Arena arena, int max){
+
+        Map<String, Integer> playersStats = StatisticsManager.getStats(arena, statType);
+
         final String s2 = Language.parse(arena, MSG.getByName("STATTYPE_" + statType.name()));
-
         final String s1 = Language.parse(arena, MSG.STATS_HEAD, String.valueOf(max), s2);
-
 
         Arena.pmsg(sender, s1);
 

@@ -8,6 +8,7 @@ import net.slipcor.pvparena.classes.PAStatMap;
 import net.slipcor.pvparena.core.ColorUtils;
 import net.slipcor.pvparena.core.Config;
 import net.slipcor.pvparena.core.Config.CFG;
+import net.slipcor.pvparena.database.PlayerArenaStats;
 import net.slipcor.pvparena.events.PAPlayerClassChangeEvent;
 import net.slipcor.pvparena.loadables.ArenaModuleManager;
 import net.slipcor.pvparena.managers.ArenaManager;
@@ -43,7 +44,7 @@ import static net.slipcor.pvparena.config.Debugger.debug;
  */
 
 public class ArenaPlayer {
-    private static final Map<UUID, ArenaPlayer> totalPlayers = new HashMap<>();
+    private static final Map<UUID, ArenaPlayer> arenaPlayersCache = new HashMap<>();
 
     private final Player player;
 
@@ -64,6 +65,7 @@ public class ArenaPlayer {
     private ItemStack[] savedInventory;
     private final Set<PermissionAttachment> tempPermissions = new HashSet<>();
     private final Map<String, PAStatMap> statistics = new HashMap<>();
+    private PlayerArenaStats stats;
 
     private Scoreboard backupBoard;
     private String backupBoardTeam;
@@ -114,12 +116,14 @@ public class ArenaPlayer {
 
     /**
      * Create new ArenaPlayer
-     * 
+     *
      * @param player bukkit player
      */
     private ArenaPlayer(@NotNull final Player player) {
         Objects.requireNonNull(player);
         this.player = player;
+        this.stats = new PlayerArenaStats();
+        this.stats.setUuid(player.getUniqueId().toString());
     }
 
     public Player getPlayer() {
@@ -127,11 +131,15 @@ public class ArenaPlayer {
     }
 
     public static Set<ArenaPlayer> getAllArenaPlayers() {
-        return new HashSet<>(totalPlayers.values());
+        return new HashSet<>(arenaPlayersCache.values());
     }
 
     public boolean getFlyState() {
         return this.flying != null && this.flying;
+    }
+
+    public PlayerArenaStats getStats() {
+        return this.stats;
     }
 
     /**
@@ -205,7 +213,7 @@ public class ArenaPlayer {
     }
 
     /**
-     * get an ArenaPlayer from a player name
+     * get an ArenaPlayer from a online player name
      *
      * @param name the playername to use
      * @return an ArenaPlayer instance belonging to that player
@@ -217,17 +225,17 @@ public class ArenaPlayer {
             // Offline player or NPC
             if (player == null) {
                 OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(name);
-                if(offlinePlayer.getPlayer() == null) {
+                if (offlinePlayer.getPlayer() == null) {
                     throw new RuntimeException(String.format("Player %s not found", name));
                 }
                 player = offlinePlayer.getPlayer();
             }
 
-            if (!totalPlayers.containsKey(player.getUniqueId())) {
+            if (!arenaPlayersCache.containsKey(player.getUniqueId())) {
                 ArenaPlayer ap = new ArenaPlayer(player);
-                totalPlayers.putIfAbsent(player.getUniqueId(), ap);
+                arenaPlayersCache.putIfAbsent(player.getUniqueId(), ap);
             }
-            return totalPlayers.get(player.getUniqueId());
+            return arenaPlayersCache.get(player.getUniqueId());
         }
     }
 
@@ -240,17 +248,21 @@ public class ArenaPlayer {
     public static ArenaPlayer addPlayer(final Player player) {
         synchronized (ArenaPlayer.class) {
             ArenaPlayer aPlayer = new ArenaPlayer(player);
-            totalPlayers.putIfAbsent(player.getUniqueId(), aPlayer);
-            return totalPlayers.get(player.getUniqueId());
+            arenaPlayersCache.putIfAbsent(player.getUniqueId(), aPlayer);
+            return arenaPlayersCache.get(player.getUniqueId());
         }
     }
 
     public static ArenaPlayer addPlayer(UUID uuid) {
-        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
-        if(offlinePlayer.getPlayer() == null) {
-            throw new RuntimeException(String.format("Player with uuid %s not found", uuid));
+        Player player = Bukkit.getPlayer(uuid);
+        if (player == null) {
+            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+            player = offlinePlayer.getPlayer();
+            if (player == null) {
+                throw new RuntimeException(String.format("Player with uuid %s not found", uuid));
+            }
         }
-        return addPlayer(offlinePlayer.getPlayer());
+        return addPlayer(player);
     }
 
     /**
@@ -351,14 +363,18 @@ public class ArenaPlayer {
 
     public void addDeath() {
         this.getStatistics(this.arena).incStat(Type.DEATHS);
+        this.stats.addDeaths(1L);
     }
 
     public void addKill() {
         this.getStatistics(this.arena).incStat(Type.KILLS);
+        this.stats.addKills(1L);
     }
 
     public void addLosses() {
+        PVPArena.getInstance().getLogger().fine("Add lose to player " + this.player.getName());
         this.getStatistics(this.arena).incStat(Type.LOSSES);
+        this.stats.addLosses(1L);
     }
 
     public void addStatistic(final String arenaName, final Type type,
@@ -371,7 +387,9 @@ public class ArenaPlayer {
     }
 
     public void addWins() {
+        PVPArena.getInstance().getLogger().fine("Add win to player " + this.player.getName());
         this.getStatistics(this.arena).incStat(Type.WINS);
+        this.stats.addWins(1L);
     }
 
     private void clearDump() {
@@ -647,6 +665,13 @@ public class ArenaPlayer {
         try {
             if (PVPArena.getInstance().getConfig().getBoolean("stats")) {
 
+                if(this.arena != null) {
+                    this.stats.setArena(this.arena.getName());
+                    PVPArena.getInstance().getDatabase().addPlayerStats(this.stats);
+                    this.stats = new PlayerArenaStats();
+                    this.stats.setUuid(this.player.getUniqueId().toString());
+                }
+
                 final String file = PVPArena.getInstance().getDataFolder()
                         + "/players.yml";
                 cfg.load(file);
@@ -817,7 +842,7 @@ public class ArenaPlayer {
     }
 
     public void setStatus(final Status status) {
-        debug(this.getPlayer(),"{}>{}", this.player.getName(), status.name());
+        debug(this.getPlayer(), "{}>{}", this.player.getName(), status.name());
         this.status = status;
     }
 

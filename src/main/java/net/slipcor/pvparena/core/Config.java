@@ -966,7 +966,7 @@ public class Config {
         final Integer prots = parseInteger(parts[9]);
 
         if (Bukkit.getWorld(parts[0]) == null) {
-            PVPArena.instance.getLogger().severe(String.format("%s caused an error while loading region %s",
+            PVPArena.getInstance().getLogger().severe(String.format("%s caused an error while loading region %s",
                     arena.getName(), regionName));
             throw new IllegalArgumentException(String.format("World %s not recognized. Is it loaded ?", parts[0]));
         }

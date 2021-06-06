@@ -15,7 +15,13 @@ import java.util.Map;
  */
 
 public class PAStatMap {
-    private final Map<StatisticsManager.Type, Integer> map = new HashMap<>();
+    private Map<StatisticsManager.Type, Integer> map = new HashMap<>();
+
+    public PAStatMap(){}
+
+    public PAStatMap(Map<StatisticsManager.Type, Integer> map) {
+        this.map = map;
+    }
 
     public void decStat(final StatisticsManager.Type type) {
         this.decStat(type, 1);
@@ -26,7 +32,7 @@ public class PAStatMap {
     }
 
     public int getStat(final StatisticsManager.Type type) {
-        return this.map.containsKey(type) ? this.map.get(type) : 0;
+        return this.map.getOrDefault(type, 0);
     }
 
     public void incStat(final StatisticsManager.Type type) {
@@ -39,5 +45,9 @@ public class PAStatMap {
 
     public void setStat(final StatisticsManager.Type type, final int value) {
         this.map.put(type, value);
+    }
+
+    public Map<StatisticsManager.Type, Integer> getMap() {
+        return map;
     }
 }
